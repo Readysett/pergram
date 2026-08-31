@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0F1E1C" />
+<title>Per Gram — the carbon cost of your protein</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0F1E1C;
+    --paper:#F6F4EF;
+    --rule:#C9C4B8;
+    --dim:#6B7A76;
+
+    --t1:#1E9E6A;   /* plant       */
+    --t2:#7FA83C;   /* low animal  */
+    --t3:#D98A2B;   /* dairy, pork */
+    --t4:#B4331F;   /* beef        */
+  }
+
+  *{box-sizing:border-box;margin:0;padding:0}
+
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Archivo",system-ui,sans-serif;
+    line-height:1.5;
+    padding:24px 20px 64px;
+    max-width:640px;
+    margin:0 auto;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- masthead ---------- */
+  header{border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:22px}
+  h1{
+    font-size:clamp(30px,9vw,46px);
+    font-weight:900;
+    letter-spacing:-.045em;
+    line-height:.95;
+  }
+  .sub{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);margin-top:8px;
+  }
+
+  /* ---------- input ---------- */
+  .entry{display:flex;gap:8px;margin-bottom:10px}
+  input{
+    flex:1;min-width:0;
+    font-family:"IBM Plex Mono",monospace;
+    font-size:16px;
+    padding:13px 14px;
+    border:2px solid var(--ink);
+    background:transparent;
+    color:var(--ink);
+    border-radius:0;
+  }
+  input::placeholder{color:var(--dim)}
+  input:focus{outline:3px solid var(--t1);outline-offset:1px}
+
+  button{
+    font-family:"Archivo",sans-serif;
+    font-size:12px;font-weight:700;
+    letter-spacing:.1em;text-transform:uppercase;
+    padding:13px 16px;
+    border:2px solid var(--ink);
+    background:var(--ink);color:var(--paper);
+    cursor:pointer;
+  }
+  button.ghost{background:transparent;color:var(--ink)}
+  button:active{transform:translateY(1px)}
+  button:disabled{opacity:.4;cursor:default}
+
+  .note{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;color:var(--dim);margin-bottom:26px;
+  }
+
+  #video{width:100%;border:2px solid var(--ink);margin-bottom:10px;display:none}
+  #video.on{display:block}
+
+  /* ---------- result ---------- */
+  #out{display:none}
+  #out.on{display:block}
+
+  .name{font-size:21px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+  .brand{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;color:var(--dim);margin-top:3px;margin-bottom:20px;
+  }
+
+  /* the number */
+  .figure{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .big{
+    font-size:clamp(56px,17vw,88px);
+    font-weight:900;letter-spacing:-.05em;line-height:.85;
+    font-variant-numeric:tabular-nums;
+  }
+  .unit{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;color:var(--dim);
+    line-height:1.35;max-width:150px;
+  }
+
+  .tierline{
+    display:flex;align-items:center;gap:9px;
+    margin:18px 0 30px;
+    font-family:"IBM Plex Mono",monospace;font-size:12px;
+  }
+  .chip{
+    color:#fff;font-weight:500;
+    padding:4px 9px;letter-spacing:.06em;text-transform:uppercase;font-size:11px;
+  }
+
+  /* ---------- the ruler: signature element ---------- */
+  .ruler{margin-bottom:30px}
+  .rulerHead{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--dim);margin-bottom:12px;
+  }
+  .track{
+    position:relative;height:8px;
+    background:linear-gradient(90deg,var(--t1),var(--t2) 34%,var(--t3) 62%,var(--t4));
+    margin-bottom:2px;
+  }
+  .tick{position:absolute;top:0;width:1px;height:8px;background:rgba(0,0,0,.34)}
+  .marker{
+    position:absolute;top:-9px;width:3px;height:26px;background:var(--ink);
+    transition:left .5s cubic-bezier(.2,.8,.3,1);
+  }
+  .scaleRow{position:relative;height:30px}
+  .scaleLab{
+    position:absolute;top:5px;
+    font-family:"IBM Plex Mono",monospace;font-size:9px;color:var(--dim);
+    transform:translateX(-50%);white-space:nowrap;
+  }
+
+  /* ---------- comparison ---------- */
+  h2{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--dim);font-weight:400;
+    padding-bottom:7px;border-bottom:1px solid var(--rule);margin-bottom:4px;
+  }
+  .row{
+    display:flex;align-items:center;gap:10px;
+    padding:9px 0;border-bottom:1px solid var(--rule);
+    font-size:14px;
+  }
+  .swatch{width:9px;height:9px;flex:none}
+  .rowName{flex:1}
+  .rowVal{font-family:"IBM Plex Mono",monospace;font-size:13px;font-variant-numeric:tabular-nums}
+  .rowMult{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);width:42px;text-align:right}
+  .row.self{font-weight:700}
+
+  .msg{
+    font-family:"IBM Plex Mono",monospace;font-size:13px;
+    padding:14px;border:2px solid var(--ink);margin-bottom:20px;
+  }
+  .msg.bad{border-color:var(--t4);color:var(--t4)}
+
+  /* ---------- add to week ---------- */
+  .addbar{
+    display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+    padding:16px 0 4px;margin-top:22px;border-top:2px solid var(--ink);
+  }
+  .addbar input{flex:0 0 96px;padding:10px 11px;font-size:15px}
+  .addbar .lab{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);
+    letter-spacing:.1em;text-transform:uppercase;
+  }
+  .flag{
+    background:none;border:none;padding:6px 0;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;
+    color:var(--dim);text-transform:none;letter-spacing:0;
+    text-decoration:underline;cursor:pointer;
+  }
+
+  /* ---------- the week ---------- */
+  #week{margin-top:38px}
+  #week.empty{display:none}
+  .wkTop{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+  .wkBig{
+    font-size:clamp(38px,12vw,60px);font-weight:900;
+    letter-spacing:-.05em;line-height:.9;font-variant-numeric:tabular-nums;
+  }
+  .wkUnit{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim)}
+  .cap{height:6px;background:var(--rule);margin:14px 0 6px;position:relative}
+  .capFill{height:6px;background:var(--t1);transition:width .4s ease}
+  .cap.over .capFill{background:var(--t4)}
+  .capNote{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--dim)}
+  .wkRow{
+    display:flex;gap:10px;align-items:baseline;
+    padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px;
+  }
+  .wkRow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wkRow .p{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim)}
+  .wkRow .pts{font-family:"IBM Plex Mono",monospace;font-size:13px;font-variant-numeric:tabular-nums}
+  .wkRow .x{
+    background:none;border:none;color:var(--dim);cursor:pointer;
+    font-size:15px;padding:0 2px;letter-spacing:0;
+  }
+
+  footer{
+    margin-top:36px;padding-top:14px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--dim);line-height:1.7;
+  }
+  a{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Per Gram</h1>
+  <div class="sub">Carbon cost of protein · kg CO₂e per 100g protein</div>
+</header>
+
+<div class="entry">
+  <input id="code" inputmode="numeric" placeholder="Barcode number" autocomplete="off">
+  <button id="go">Look up</button>
+</div>
+<div class="entry">
+  <button class="ghost" id="cam" style="flex:1">Scan with camera</button>
+</div>
+<div class="note" id="camnote">Type the number under the barcode if the camera won't cooperate.</div>
+
+<video id="video" playsinline muted></video>
+
+<div id="msg"></div>
+
+<div id="out">
+  <div class="name" id="pname">—</div>
+  <div class="brand" id="pbrand">—</div>
+
+  <div class="figure">
+    <div class="big" id="figure">—</div>
+    <div class="unit">kg CO₂e<br>per 100g<br>of protein</div>
+  </div>
+
+  <div class="tierline">
+    <span class="chip" id="chip">—</span>
+    <span id="tierwhy">—</span>
+  </div>
+
+  <div class="ruler">
+    <div class="rulerHead">Where it lands</div>
+    <div class="track" id="track">
+      <div class="marker" id="marker" style="left:0%"></div>
+    </div>
+    <div class="scaleRow" id="scaleRow"></div>
+  </div>
+
+  <h2>Same 100g of protein — footprint and rate</h2>
+  <div id="compare"></div>
+
+  <div class="addbar">
+    <span class="lab">Bought</span>
+    <input id="grams" inputmode="numeric" value="100">
+    <span class="lab">grams of it</span>
+    <button id="add">Add to this week</button>
+  </div>
+  <button class="flag" id="flag">This classification looks wrong →</button>
+</div>
+
+<div id="week" class="empty">
+  <h2>This week</h2>
+  <div class="wkTop">
+    <div>
+      <div class="wkBig" id="wkPts">0</div>
+      <div class="wkUnit">points earned</div>
+    </div>
+    <div style="text-align:right">
+      <div class="wkBig" id="wkCo2">0</div>
+      <div class="wkUnit">kg CO₂e bought</div>
+    </div>
+  </div>
+
+  <div class="cap" id="cap"><div class="capFill" id="capFill" style="width:0%"></div></div>
+  <div class="capNote" id="capNote">0g of 1500g weekly protein cap</div>
+
+  <div id="wkList" style="margin-top:16px"></div>
+
+  <div style="margin-top:14px;display:flex;gap:8px">
+    <button class="ghost" id="clearWeek">Clear week</button>
+  </div>
+  <div class="capNote" style="margin-top:10px" id="wkFoot"></div>
+</div>
+
+<footer>
+  The rate is inversely proportional to carbon intensity: a source at 2.0 kg CO₂e per 100g of
+  protein earns the full 1.00×, and anything above that earns proportionally less. There are no
+  bands, so nothing is protected by the company it keeps.<br>
+  Footprints: Poore &amp; Nemecek (2018), <i>Science</i> — global medians across ~38,000 farms.
+  Product data: Open Food Facts, a community database.<br>
+  Cheese is costed at roughly double milk protein: it takes about ten litres of milk per
+  kilo of cheese, and it carries the share of the herd's footprint that whey is discounted for.
+  Applying the allocation at one end only would flatter both.<br>
+  Whey is costed by <b>economic allocation</b>: it is a by-product of cheese making, so the
+  herd's emissions are apportioned by the value of what the process yields, and whey carries
+  a fraction rather than a full dairy share. Under mass-balance accounting instead — dividing
+  emissions evenly across everything the herd produces — whey lands nearer 8–9, close to milk
+  protein. Both methods appear in published work. This app uses the former, consistently, for
+  both the figure and the tier.
+</footer>
+
+<script src="classifier.js"></script>
+<script>
+/* ============================================================
+   Footprints are kg CO2e per 100g of PROTEIN, not per kg of
+   food. Per kg of food flatters anything watery — tofu looks
+   better than it is. Per gram of protein delivered is the
+   comparison that matters to someone buying protein.
+   ============================================================ */
+
+/* Log scale: beef is ~125x pea. Linear would squash everything
+   readable into the left 5% of the track. */
+const LO = 0.3, HI = 60;
+const pos = v => {
+  const p = (Math.log(v) - Math.log(LO)) / (Math.log(HI) - Math.log(LO));
+  return Math.max(0, Math.min(1, p)) * 100;
+};
+
+const $ = id => document.getElementById(id);
+
+/* ---------- the week ----------
+   Points, not tokens. The B3TR rate is only known when the round
+   closes and the pool is divided, so showing a token figure now would
+   be a promise the DAO has not made. */
+const WEEKLY_CAP = 1500;      // g protein per round
+const STORE_KEY  = 'pergram.week.v1';
+
+let current = null;           // last successfully classified product
+let week = load();
+
+function load(){
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || []; }
+  catch(e){ return []; }
+}
+function save(){
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(week)); } catch(e){}
+}
+
+function renderWeek(){
+  const el = $('week');
+  if (!week.length){ el.classList.add('empty'); return; }
+  el.classList.remove('empty');
+
+  const totalProtein = week.reduce((a,e) => a + e.protein, 0);
+  const counted      = Math.min(totalProtein, WEEKLY_CAP);
+  const points       = week.reduce((a,e) => a + e.points, 0);
+  const co2          = week.reduce((a,e) => a + e.co2, 0);
+
+  // The cap bites proportionally rather than truncating the last item,
+  // so the order things were scanned in never changes what you earn.
+  const scale = totalProtein > WEEKLY_CAP ? WEEKLY_CAP / totalProtein : 1;
+
+  $('wkPts').textContent = Math.round(points * scale).toLocaleString();
+  $('wkCo2').textContent = co2 >= 10 ? co2.toFixed(0) : co2.toFixed(1);
+
+  const pctCap = Math.min(100, 100 * totalProtein / WEEKLY_CAP);
+  $('capFill').style.width = pctCap + '%';
+  $('cap').classList.toggle('over', totalProtein > WEEKLY_CAP);
+  $('capNote').textContent = Math.round(totalProtein) + 'g of ' + WEEKLY_CAP
+    + 'g weekly protein cap' + (totalProtein > WEEKLY_CAP ? ' — over, so points are scaled down' : '');
+
+  $('wkList').innerHTML = week.map((e,i) =>
+    '<div class="wkRow">'
+    + '<span class="n">' + e.name + '</span>'
+    + '<span class="p">' + Math.round(e.protein) + 'g · ' + e.mult.toFixed(2) + '×</span>'
+    + '<span class="pts">' + Math.round(e.points) + '</span>'
+    + '<button class="x" data-i="' + i + '" title="remove">×</button>'
+    + '</div>').join('');
+
+  /* Median, not mean. Beef at 50 drags the mean upward far enough that
+     almost anything looks good against it — a flattering baseline is
+     the first thing a reviewer picks apart. */
+  const all = Object.values(SOURCES).map(s => s.co2).sort((a,b) => a - b);
+  const mid = all.length % 2
+    ? all[(all.length - 1) / 2]
+    : (all[all.length/2 - 1] + all[all.length/2]) / 2;
+  const baseline = totalProtein / 100 * mid;
+  const diff = baseline - co2;
+  $('wkFoot').textContent =
+    (diff >= 0
+      ? Math.abs(diff).toFixed(1) + ' kg CO₂e below'
+      : Math.abs(diff).toFixed(1) + ' kg CO₂e above')
+    + ' the same protein from a median source (' + mid.toFixed(1) + ' kg per 100g). '
+    + 'Points convert to B3TR when the round closes and the pool is divided — '
+    + 'the rate is not known before then.';
+}
+
+$('wkList').addEventListener('click', e => {
+  const i = e.target && e.target.dataset && e.target.dataset.i;
+  if (i === undefined) return;
+  week.splice(+i, 1); save(); renderWeek();
+});
+
+$('clearWeek').addEventListener('click', () => { week = []; save(); renderWeek(); });
+
+$('add').addEventListener('click', () => {
+  if (!current){ show('Look something up first.', true); return; }
+  const grams = parseFloat($('grams').value);
+  if (!(grams > 0)){ show('How many grams of it did you buy?', true); return; }
+
+  const protein = grams * current.protein100 / 100;
+  week.push({
+    name:    current.name,
+    protein: protein,
+    mult:    current.mult,
+    points:  protein * current.mult,
+    co2:     protein / 100 * current.co2,
+  });
+  save(); renderWeek();
+  $('week').scrollIntoView({ behavior:'smooth', block:'start' });
+});
+
+$('flag').addEventListener('click', () => {
+  if (!current) return;
+  $('flag').textContent = 'Flagged — thanks. Brand names are the weak spot; reports fix them.';
+  $('flag').disabled = true;
+  // Kept locally for now. When there is a backend, this posts a report
+  // and the barcode gets a corrected entry in the cache.
+  try {
+    const f = JSON.parse(localStorage.getItem('pergram.flags') || '[]');
+    f.push({ barcode: current.barcode, name: current.name, said: current.label, at: Date.now() });
+    localStorage.setItem('pergram.flags', JSON.stringify(f));
+  } catch(e){}
+});
+
+function drawScale(){
+  const row = $('scaleRow'), track = $('track');
+  [...track.querySelectorAll('.tick')].forEach(t => t.remove());
+  row.innerHTML = '';
+  for (const v of [0.5, 1, 2, 5, 10, 20, 50]){
+    const x = pos(v);
+    const t = document.createElement('div');
+    t.className = 'tick'; t.style.left = x + '%';
+    track.appendChild(t);
+    const l = document.createElement('div');
+    l.className = 'scaleLab'; l.style.left = x + '%'; l.textContent = v;
+    row.appendChild(l);
+  }
+}
+
+function show(msg, bad){
+  $('msg').innerHTML = msg ? '<div class="msg' + (bad ? ' bad' : '') + '">' + msg + '</div>' : '';
+}
+
+async function lookup(barcode){
+  barcode = (barcode || '').replace(/\D/g, '');
+  /* Retail barcodes are 8, 12, 13 or 14 digits. Anything else means
+     digits were missed — usually the lone one at the far left of the
+     bars and the check digit at the far right, both outside the main
+     block. Saying so beats reporting a false "not found". */
+  const VALID_LENGTHS = [8, 12, 13, 14];
+  if (!VALID_LENGTHS.includes(barcode.length)){
+    show('That is ' + barcode.length + ' digits, and barcodes are 8, 12, 13 or 14. '
+       + 'Check the ends of the barcode — there is usually a single digit outside '
+       + 'the bars at the left, and a check digit at the right.', true);
+    return;
+  }
+
+  show('Looking up ' + barcode + ' …');
+  $('out').classList.remove('on');
+
+  /* US barcodes are 12-digit UPC; Open Food Facts stores most records
+     as 13-digit EAN with a leading zero. Same product, different string.
+     Try the sensible variants rather than making the user know this. */
+  const variants = [barcode];
+  if (barcode.length === 12) variants.push('0' + barcode);
+  if (barcode.length === 13 && barcode[0] === '0') variants.push(barcode.slice(1));
+  if (barcode.length === 8)  variants.push(barcode.padStart(13, '0'));
+
+  let p = null, foundAs = null;
+  for (const v of variants){
+    try {
+      const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + v +
+        '.json?fields=product_name,brands,nutriments,ingredients_text,categories,labels_tags');
+      const j = await r.json();
+      if (j && j.product && (j.product.product_name || j.product.ingredients_text)){
+        p = j.product; foundAs = v; break;
+      }
+    } catch(e){
+      show('Could not reach Open Food Facts. Check the connection and try again.', true);
+      return;
+    }
+  }
+
+  if (!p){
+    show('Not in Open Food Facts under ' + variants.join(' or ') +
+         '. It is a community database, so gaps are normal — you can add the product in their app and it will work here afterwards.', true);
+    return;
+  }
+
+  const protein = p.nutriments && (p.nutriments.proteins_100g ?? p.nutriments.proteins);
+  const tags = (p.labels_tags || []).join(' ');
+  const isVegan = /\bvegan\b/i.test(tags) && !/non-vegan|maybe-vegan/i.test(tags);
+
+  /* Protein has to be the point of the food. Green beans are 0.8g per
+     100g — a vegetable, not a protein source. Without this gate every
+     tin of vegetables gets a tier and a multiplier, which is both wrong
+     and the cheapest thing in the app to farm. */
+  const proteinTxt = (protein || protein === 0)
+    ? (Math.round(protein * 10) / 10) + 'g protein per 100g'
+    : 'protein content unknown';
+
+  const MIN_PROTEIN_100G = 10;
+  if (!(protein >= MIN_PROTEIN_100G)){
+    current = null;
+    $('pname').textContent  = p.product_name || 'Unnamed product';
+    $('pbrand').textContent = [p.brands, proteinTxt].filter(Boolean).join(' · ');
+    $('out').classList.remove('on');
+    show((protein || protein === 0)
+      ? '<b>' + (p.product_name || 'This product') + '</b> is '
+        + (Math.round(protein * 10) / 10) + 'g protein per 100g. Per Gram covers foods '
+        + 'where protein is the point — ' + MIN_PROTEIN_100G + 'g per 100g or more. '
+        + 'This one is not a protein source, so it earns nothing.'
+      : 'No protein figure on this record, so it cannot be scored. You can add the '
+        + 'nutrition data in the Open Food Facts app and it will work here afterwards.', true);
+    return;
+  }
+
+  const { key } = classifyProduct({
+    name: p.product_name || '', ingredients: p.ingredients_text || '',
+    categories: p.categories || '', vegan: isVegan,
+  });
+
+  $('pname').textContent  = p.product_name || 'Unnamed product';
+  $('pbrand').textContent = [p.brands, proteinTxt].filter(Boolean).join(' · ');
+
+  if (!key){
+    show('Could not tell what the protein is from the ingredients. Unrecognised products default to the dairy tier — never the top one, or that becomes the easiest thing to exploit.', true);
+  } else {
+    show(foundAs !== barcode ? 'Found as ' + foundAs + ' — leading zero added.' : '');
+  }
+
+  // Unresolved defaults to tier 3, deliberately. See the spec.
+  const src  = key ? SOURCES[key] : FALLBACK;
+  const tier = TIERS[src.tier];
+
+  $('figure').textContent = src.co2 % 1 === 0 ? src.co2.toFixed(0) : src.co2.toFixed(1);
+  $('chip').textContent = tier.name;
+  $('chip').style.background = tier.color;
+  $('tierwhy').textContent = 'earns ' + src.mult.toFixed(2) + '× · read as ' + src.label.toLowerCase();
+
+  current = {
+    barcode: foundAs || barcode,
+    name:    p.product_name || 'Unnamed product',
+    label:   src.label,
+    co2:     src.co2,
+    mult:    src.mult,
+    protein100: protein,
+  };
+  $('flag').textContent = 'This classification looks wrong →';
+  $('flag').disabled = false;
+
+  drawScale();
+  requestAnimationFrame(() => { $('marker').style.left = pos(src.co2) + '%'; });
+
+  const list = Object.values(SOURCES).sort((a,b) => a.co2 - b.co2);
+  $('compare').innerHTML = list.map(s => {
+    const self = s.label === src.label;
+    return '<div class="row' + (self ? ' self' : '') + '">'
+      + '<span class="swatch" style="background:' + TIERS[s.tier].color + '"></span>'
+      + '<span class="rowName">' + s.label + (self ? ' — this one' : '') + '</span>'
+      + '<span class="rowVal">' + s.co2 + '</span>'
+      + '<span class="rowMult">' + s.mult.toFixed(2) + '×</span>'
+      + '</div>';
+  }).join('');
+
+  $('out').classList.add('on');
+}
+
+/* Any throw inside lookup() used to leave "Looking up …" on screen with
+   no explanation. Never fail silently — say what broke. */
+async function safeLookup(v){
+  try { await lookup(v); }
+  catch(err){
+    console.error(err);
+    show('Something broke while looking that up: ' + (err && err.message ? err.message : err), true);
+  }
+}
+
+$('go').addEventListener('click', () => safeLookup($('code').value));
+$('code').addEventListener('keydown', e => { if (e.key === 'Enter') safeLookup($('code').value); });
+
+/* ---------- camera, strictly optional ---------- */
+let stream = null, scanning = false;
+
+$('cam').addEventListener('click', async () => {
+  if (scanning){ stopCam(); return; }
+  if (!('BarcodeDetector' in window)){
+    $('camnote').textContent = 'This browser has no barcode reader. Type the number instead — same result.';
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    const v = $('video');
+    v.srcObject = stream; v.classList.add('on'); await v.play();
+    scanning = true;
+    $('cam').textContent = 'Stop camera';
+
+    const det = new BarcodeDetector({ formats:['ean_13','ean_8','upc_a','upc_e'] });
+    const tick = async () => {
+      if (!scanning) return;
+      try {
+        const codes = await det.detect(v);
+        if (codes.length){
+          $('code').value = codes[0].rawValue;
+          stopCam();
+          safeLookup(codes[0].rawValue);
+          return;
+        }
+      } catch(e){ /* between frames; keep going */ }
+      setTimeout(tick, 250);
+    };
+    tick();
+  } catch(e){
+    $('camnote').textContent = 'Camera blocked: ' + e.message + ' — type the number instead.';
+  }
+});
+
+function stopCam(){
+  scanning = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  $('video').classList.remove('on');
+  $('cam').textContent = 'Scan with camera';
+}
+
+drawScale();
+renderWeek();
+</script>
+</body>
+</html>
