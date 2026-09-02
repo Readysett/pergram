@@ -91,7 +91,7 @@ window.pergramClaim = async function(item){
        rather than dressed up as a verified claim. */
     await postClaim(
       { store: 'manual-entry', txn: null, purchased: Date.now(), total_cents: null,
-        image_hash: 'manual:' + item.barcode + ':' + Date.now() },
+        image_hash: 'manual:' + item.barcode + ':' + item.entry_id },
       [{ barcode: item.barcode, product: item.name, source_key: item.source_key,
          protein_g: item.protein, co2: item.co2, mult: item.mult }],
     );

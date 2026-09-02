@@ -367,6 +367,12 @@ const WEEKLY_CAP = 1500;      // g protein per round
 const STORE_KEY  = 'pergram.week.v1';
 
 let current = null;           // last successfully classified product
+
+/* Identifies one entry across retries. A claim is keyed on this, so a
+   second tap on an entry the server already accepted replays that claim
+   rather than making another. Cleared whenever the product or the
+   quantity changes, which is what makes a new entry genuinely new. */
+let entryId = null;
 let week = load();
 
 function load(){
@@ -464,6 +470,8 @@ $('add').addEventListener('click', async () => {
   const grams = parseFloat($('grams').value);
   if (!(grams > 0)){ show('How many grams of it did you buy?', true); return; }
 
+  if (!entryId) entryId = crypto.randomUUID();
+
   const protein = grams * current.protein100 / 100;
   const entry = {
     barcode: current.barcode,
@@ -473,6 +481,7 @@ $('add').addEventListener('click', async () => {
     points:  protein * current.mult,
     co2:     protein / 100 * current.co2,
     source_key: current.source_key,
+    entry_id: entryId,
   };
 
   /* Server first when signed in; the device otherwise. A rejected claim
@@ -493,6 +502,11 @@ $('add').addEventListener('click', async () => {
   }
   $('week').scrollIntoView({ behavior:'smooth', block:'start' });
 });
+
+/* Changing the quantity means a different entry, so it earns a new id.
+   Retyping the same number also resets it, which is the behaviour a user
+   who wants a second identical entry would reach for anyway. */
+$('grams').addEventListener('input', () => { entryId = null; });
 
 $('flag').addEventListener('click', () => {
   if (!current) return;
@@ -588,6 +602,7 @@ async function lookup(barcode){
   const MIN_PROTEIN_100G = 10;
   if (!(protein >= MIN_PROTEIN_100G)){
     current = null;
+    entryId = null;
     $('pname').textContent  = p.product_name || 'Unnamed product';
     $('pbrand').textContent = [p.brands, proteinTxt].filter(Boolean).join(' · ');
     $('out').classList.remove('on');
@@ -624,6 +639,7 @@ async function lookup(barcode){
   $('chip').style.background = tier.color;
   $('tierwhy').textContent = 'earns ' + src.mult.toFixed(2) + '× · read as ' + src.label.toLowerCase();
 
+  entryId = null;              // a different product is a different entry
   current = {
     barcode: foundAs || barcode,
     name:    p.product_name || 'Unnamed product',
