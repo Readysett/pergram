@@ -90,3 +90,4 @@ tests and the app cannot drift apart.
 
 The scanner is live. Reward distribution and receipt verification are in
 development and not part of this repository.
+
