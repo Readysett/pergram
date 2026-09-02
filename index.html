@@ -182,6 +182,22 @@
     padding:16px 0 4px;margin-top:22px;border-top:2px solid var(--ink);
   }
   .addbar input{flex:0 0 96px;padding:10px 11px;font-size:15px}
+  .addbar select{
+    font-family:"IBM Plex Mono",monospace;font-size:14px;
+    padding:10px 8px;border:2px solid var(--ink);background:transparent;
+    color:var(--ink);border-radius:0;
+  }
+  .qtyHint{
+    font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim);
+    margin:8px 0 0;line-height:1.6;
+  }
+  .qtyHint b{color:var(--ink);font-weight:600}
+  .preset{
+    background:none;border:none;padding:0;
+    font-family:"IBM Plex Mono",monospace;font-size:12px;
+    color:var(--ink);text-decoration:underline;cursor:pointer;
+    letter-spacing:0;text-transform:none;
+  }
   .addbar .lab{
     font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);
     letter-spacing:.1em;text-transform:uppercase;
@@ -277,16 +293,24 @@
   <div id="compare"></div>
 
   <div class="addbar">
-    <span class="lab">Bought</span>
-    <input id="grams" inputmode="numeric" value="100">
-    <span class="lab">grams of it</span>
+    <span class="lab">How much did you buy?</span>
+  </div>
+  <div class="addbar" style="border:none;padding-top:8px;margin-top:0">
+    <input id="grams" inputmode="decimal" value="100">
+    <select id="unit">
+      <option value="g" selected>grams</option>
+      <option value="oz">ounces</option>
+      <option value="lb">pounds</option>
+      <option value="serving">servings</option>
+    </select>
     <button id="add">Add to this week</button>
   </div>
-  <div class="capNote" style="margin:8px 0 2px">
-    Demo only — a typed quantity is not a claim. In the live app the receipt
-    supplies the quantity and caps it, because a number you type is a number
-    you would inflate.
-  </div>
+
+  <p class="qtyHint" id="qtyHint">
+    The weight of the <b>food</b>, not the protein in it. A standard tin of tuna
+    is about 5 oz; a tub of powder is on the label.
+  </p>
+
   <button class="flag" id="flag">This classification looks wrong →</button>
 </div>
 
@@ -359,6 +383,14 @@ const pos = v => {
 
 const $ = id => document.getElementById(id);
 
+/* Open Food Facts records a serving size as free text: "1 can (142 g)",
+   "30g", "2 tbsp (32g)". Pull the grams out when it is there. */
+function servingGrams(p){
+  const t = String((p && (p.serving_size || p.serving_quantity)) || '');
+  const m = t.match(/(\d+(?:\.\d+)?)\s*g\b/i);
+  return m ? parseFloat(m[1]) : null;
+}
+
 /* ---------- the week ----------
    Points, not tokens. The B3TR rate is only known when the round
    closes and the pool is divided, so showing a token figure now would
@@ -370,9 +402,10 @@ let current = null;           // last successfully classified product
 
 /* Identifies one entry across retries. A claim is keyed on this, so a
    second tap on an entry the server already accepted replays that claim
-   rather than making another. Cleared whenever the product or the
-   quantity changes, which is what makes a new entry genuinely new. */
+   rather than making another. Cleared whenever the product, the quantity
+   or the unit changes, which is what makes a new entry genuinely new. */
 let entryId = null;
+
 let week = load();
 
 function load(){
@@ -465,10 +498,53 @@ $('clearWeek').addEventListener('click', () => {
   week = []; save(); renderWeek();
 });
 
+/* US packaging is in ounces and pounds; the field said grams and the
+   packet says 5 oz, so people typed the wrong number and got a tenth of
+   what they bought. Accept the units actually printed on food. */
+const UNITS = { g: 1, oz: 28.3495, lb: 453.592 };
+
+function gramsEntered(){
+  const n = parseFloat($('grams').value);
+  if (!(n > 0)) return null;
+  const unit = $('unit').value;
+  if (unit === 'serving'){
+    const size = current && current.serving_g;
+    return size ? n * size : null;      // no serving size on record
+  }
+  return n * (UNITS[unit] || 1);
+}
+
+/* Show what the entry will count as before it is added. Guessing wrong
+   is the failure mode here, and a number you can see beats a rule you
+   have to remember. */
+function updateHint(){
+  const hint = $('qtyHint');
+  if (!current){
+    hint.innerHTML = 'The weight of the <b>food</b>, not the protein in it.';
+    return;
+  }
+  const g = gramsEntered();
+  if ($('unit').value === 'serving' && !(current && current.serving_g)){
+    hint.innerHTML = 'No serving size on this product\u2019s record — enter a weight instead.';
+    return;
+  }
+  if (g === null){ hint.innerHTML = 'Enter how much of the food you bought.'; return; }
+  const protein = g * current.protein100 / 100;
+  hint.innerHTML = 'That is <b>' + Math.round(g) + 'g</b> of '
+    + (current.name || 'product').toLowerCase()
+    + ', which contains <b>' + (Math.round(protein * 10) / 10) + 'g of protein</b>'
+    + ' \u2014 worth about <b>' + Math.round(protein * current.mult) + ' points</b>.';
+}
+
+/* Quantity and unit each define the entry — 5 oz is not 5 g — so either
+   one changing begins a new entry rather than a retry of the last. */
+$('grams').addEventListener('input',  () => { entryId = null; updateHint(); });
+$('unit').addEventListener('change', () => { entryId = null; updateHint(); });
+
 $('add').addEventListener('click', async () => {
   if (!current){ show('Look something up first.', true); return; }
-  const grams = parseFloat($('grams').value);
-  if (!(grams > 0)){ show('How many grams of it did you buy?', true); return; }
+  const grams = gramsEntered();
+  if (grams === null){ show('Enter how much of the food you bought.', true); return; }
 
   if (!entryId) entryId = crypto.randomUUID();
 
@@ -502,11 +578,6 @@ $('add').addEventListener('click', async () => {
   }
   $('week').scrollIntoView({ behavior:'smooth', block:'start' });
 });
-
-/* Changing the quantity means a different entry, so it earns a new id.
-   Retyping the same number also resets it, which is the behaviour a user
-   who wants a second identical entry would reach for anyway. */
-$('grams').addEventListener('input', () => { entryId = null; });
 
 $('flag').addEventListener('click', () => {
   if (!current) return;
@@ -570,7 +641,7 @@ async function lookup(barcode){
   for (const v of variants){
     try {
       const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + v +
-        '.json?fields=product_name,brands,nutriments,ingredients_text,categories,labels_tags');
+        '.json?fields=product_name,brands,nutriments,ingredients_text,categories,labels_tags,serving_size,serving_quantity,quantity');
       const j = await r.json();
       if (j && j.product && (j.product.product_name || j.product.ingredients_text)){
         p = j.product; foundAs = v; break;
@@ -648,7 +719,9 @@ async function lookup(barcode){
     mult:    src.mult,
     protein100: protein,
     source_key: key || 'unresolved',
+    serving_g: servingGrams(p),
   };
+  updateHint();
   $('flag').textContent = 'This classification looks wrong →';
   $('flag').disabled = false;
 
