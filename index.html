@@ -165,6 +165,17 @@
   }
   .msg.bad{border-color:var(--t4);color:var(--t4)}
 
+  /* ---------- account strip ---------- */
+  #acct{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);
+    margin-bottom:18px;
+  }
+  #acct button{padding:8px 12px;font-size:11px}
+  #acct .who{letter-spacing:.06em}
+  #acct .dot{width:7px;height:7px;border-radius:50%;background:var(--rule)}
+  #acct.on .dot{background:var(--t1)}
+
   /* ---------- add to week ---------- */
   .addbar{
     display:flex;gap:8px;align-items:center;flex-wrap:wrap;
@@ -220,6 +231,12 @@
   <h1>Per Gram</h1>
   <div class="sub">Carbon cost of protein · kg CO₂e per 100g protein</div>
 </header>
+
+<div id="acct">
+  <span class="dot"></span>
+  <span class="who" id="acctWho">Working offline — this week is stored on this device only</span>
+  <button class="ghost" id="signIn">Sign in with wallet</button>
+</div>
 
 <div class="entry">
   <input id="code" inputmode="numeric" placeholder="Barcode number" autocomplete="off">
@@ -314,7 +331,16 @@
   both the figure and the tier.
 </footer>
 
+<script>
+/* Where the API lives. Localhost during development, the deployed API
+   otherwise. Kept here rather than hardcoded in api.js so it is visible
+   to anyone reading the page, and changeable without touching code. */
+window.PERGRAM_API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname)
+  ? 'http://localhost:8787'
+  : 'https://pergram-api-production.up.railway.app';
+</script>
 <script src="classifier.js"></script>
+<script type="module" src="api-bridge.js"></script>
 <script>
 /* ============================================================
    Footprints are kg CO2e per 100g of PROTEIN, not per kg of
@@ -351,15 +377,34 @@ function save(){
   try { localStorage.setItem(STORE_KEY, JSON.stringify(week)); } catch(e){}
 }
 
+/* The bridge calls this with server data when signed in, and with null
+   when not. One render path either way — two would drift. */
+let fromServer = null;
+window.renderWeekFrom = function(data){ fromServer = data; renderWeek(); };
+
 function renderWeek(){
   const el = $('week');
-  if (!week.length){ el.classList.add('empty'); return; }
+
+  /* Server rows and local rows are concatenated, not chosen between.
+     Reading only from the server hid any entry that had fallen back to
+     local storage after a rejected claim — saved, but invisible, which
+     is the worst of both. */
+  const serverRows = fromServer
+    ? (fromServer.claims || []).map(c => ({
+        name: c.product || 'Unnamed', protein: c.protein_g,
+        mult: c.protein_g ? c.points / c.protein_g : 0,
+        points: c.points, co2: c.co2_kg, remote: true,
+      }))
+    : [];
+  const rows = serverRows.concat(week);
+
+  if (!rows.length){ el.classList.add('empty'); return; }
   el.classList.remove('empty');
 
-  const totalProtein = week.reduce((a,e) => a + e.protein, 0);
+  const totalProtein = rows.reduce((a,e) => a + e.protein, 0);
   const counted      = Math.min(totalProtein, WEEKLY_CAP);
-  const points       = week.reduce((a,e) => a + e.points, 0);
-  const co2          = week.reduce((a,e) => a + e.co2, 0);
+  const points       = rows.reduce((a,e) => a + e.points, 0);
+  const co2          = rows.reduce((a,e) => a + e.co2, 0);
 
   // The cap bites proportionally rather than truncating the last item,
   // so the order things were scanned in never changes what you earn.
@@ -374,12 +419,12 @@ function renderWeek(){
   $('capNote').textContent = Math.round(totalProtein) + 'g of ' + WEEKLY_CAP
     + 'g weekly protein cap' + (totalProtein > WEEKLY_CAP ? ' — over, so points are scaled down' : '');
 
-  $('wkList').innerHTML = week.map((e,i) =>
+  $('wkList').innerHTML = rows.map((e,i) =>
     '<div class="wkRow">'
     + '<span class="n">' + e.name + '</span>'
     + '<span class="p">' + Math.round(e.protein) + 'g · ' + e.mult.toFixed(2) + '×</span>'
     + '<span class="pts">' + Math.round(e.points) + '</span>'
-    + '<button class="x" data-i="' + i + '" title="remove">×</button>'
+    + (e.remote ? '' : '<button class="x" data-i="' + (i - serverRows.length) + '" title="remove">×</button>')
     + '</div>').join('');
 
   /* Median, not mean. Beef at 50 drags the mean upward far enough that
@@ -406,22 +451,46 @@ $('wkList').addEventListener('click', e => {
   week.splice(+i, 1); save(); renderWeek();
 });
 
-$('clearWeek').addEventListener('click', () => { week = []; save(); renderWeek(); });
+$('clearWeek').addEventListener('click', () => {
+  if (fromServer){
+    show('Claims on the server are part of a settled round and cannot be cleared here.', true);
+    return;
+  }
+  week = []; save(); renderWeek();
+});
 
-$('add').addEventListener('click', () => {
+$('add').addEventListener('click', async () => {
   if (!current){ show('Look something up first.', true); return; }
   const grams = parseFloat($('grams').value);
   if (!(grams > 0)){ show('How many grams of it did you buy?', true); return; }
 
   const protein = grams * current.protein100 / 100;
-  week.push({
+  const entry = {
+    barcode: current.barcode,
     name:    current.name,
     protein: protein,
     mult:    current.mult,
     points:  protein * current.mult,
     co2:     protein / 100 * current.co2,
-  });
-  save(); renderWeek();
+    source_key: current.source_key,
+  };
+
+  /* Server first when signed in; the device otherwise. A rejected claim
+     falls back rather than vanishing — losing a user's entry because a
+     server was unreachable is worse than storing it locally. */
+  let stored = false;
+  if (window.pergramSignedIn && window.pergramSignedIn()){
+    const result = await window.pergramClaim(entry);
+    stored = result === true;
+    if (!stored){
+      show('Saved on this device — the server refused that claim'
+        + (typeof result === 'string' ? ': ' + result : '') + '.', true);
+    }
+  }
+  if (!stored){
+    week.push(entry);
+    save(); renderWeek();
+  }
   $('week').scrollIntoView({ behavior:'smooth', block:'start' });
 });
 
@@ -431,6 +500,7 @@ $('flag').addEventListener('click', () => {
   $('flag').disabled = true;
   // Kept locally for now. When there is a backend, this posts a report
   // and the barcode gets a corrected entry in the cache.
+  if (window.pergramFlag) window.pergramFlag(current.barcode, current.label);
   try {
     const f = JSON.parse(localStorage.getItem('pergram.flags') || '[]');
     f.push({ barcode: current.barcode, name: current.name, said: current.label, at: Date.now() });
@@ -561,6 +631,7 @@ async function lookup(barcode){
     co2:     src.co2,
     mult:    src.mult,
     protein100: protein,
+    source_key: key || 'unresolved',
   };
   $('flag').textContent = 'This classification looks wrong →';
   $('flag').disabled = false;
