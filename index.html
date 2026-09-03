@@ -749,7 +749,7 @@ $('receiptFile').addEventListener('change', async e => {
   $('shoot').disabled = true;
   $('shoot').textContent = 'Reading the receipt…';
   try {
-    receiptResult = await window.pergramReceipt(file, basket);
+    receiptResult = await window.pergramReceipt(await downscale(file, RECEIPT_MAX_EDGE), basket);
     askChoice = {};
     renderReceipt();
     $('receipt').scrollIntoView({ behavior:'smooth', block:'start' });
@@ -760,6 +760,43 @@ $('receiptFile').addEventListener('change', async e => {
     $('shoot').textContent = 'Photograph the receipt';
   }
 });
+
+/* Receipts are read by a machine, not looked at. A phone photograph
+   carries several megabytes of detail no OCR uses, and Vision refuses a
+   request whose JSON exceeds 10MB — which base64 reaches at roughly
+   7.5MB of image. Scaling the long edge to 2400px keeps receipt text
+   legible, lands the upload well under a megabyte, and costs less and
+   returns sooner for it. */
+const RECEIPT_MAX_EDGE = 2400;
+
+function downscale(file, maxEdge){
+  return new Promise(resolve => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+
+      /* Already small enough. Re-encoding would only throw away detail
+         the OCR might want. */
+      if (scale === 1) return resolve(file);
+
+      const c = document.createElement('canvas');
+      c.width  = Math.round(img.width  * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(
+        b => resolve(b ? new File([b], 'receipt.jpg', { type: 'image/jpeg' }) : file),
+        'image/jpeg', 0.85);
+    };
+
+    /* Undecodable here is not necessarily undecodable there — let the
+       server be the one to refuse it, with a reason. */
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
 
 /* The figure the server returned, unless the user has said it was less.
    There is no third option: no answer here may raise a claim. */
