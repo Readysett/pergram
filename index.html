@@ -229,6 +229,42 @@
   .wkRow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .wkRow .p{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim)}
   .wkRow .pts{font-family:"IBM Plex Mono",monospace;font-size:13px;font-variant-numeric:tabular-nums}
+  /* ---------- shopping list and receipt ---------- */
+  #basket, #receipt{border:2px solid var(--ink);padding:16px;margin-top:22px}
+  #basket.empty, #receipt.empty{display:none}
+  #basket h2, #receipt h2{
+    font-family:"Archivo",sans-serif;font-size:13px;font-weight:900;
+    text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;
+  }
+  .bRow, .mRow{
+    display:flex;align-items:baseline;gap:10px;padding:8px 0;
+    border-bottom:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim);
+  }
+  .bRow .n, .mRow .n{
+    flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-family:"Archivo",sans-serif;font-size:13px;color:var(--ink);
+  }
+  .mRow .g{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .mRow.no .n{color:var(--dim)}
+  .bRow .x{
+    background:none;border:none;color:var(--dim);cursor:pointer;
+    font-size:15px;padding:0 2px;letter-spacing:0;
+  }
+  .mLine{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);
+    padding:0 0 8px;border-bottom:1px solid var(--rule);
+  }
+  .askBox{border:2px solid var(--t3);padding:12px;margin:10px 0 14px}
+  .askQ{font-family:"IBM Plex Mono",monospace;font-size:12px;margin-bottom:10px;color:var(--ink)}
+  .askBtns{display:flex;gap:8px;flex-wrap:wrap}
+  .askBtns button{padding:8px 12px;font-size:11px}
+  .askBtns button[aria-pressed="true"]{outline:3px solid var(--t1);outline-offset:2px}
+  .warn{
+    font-family:"IBM Plex Mono",monospace;font-size:12px;line-height:1.6;
+    border-left:3px solid var(--t4);padding:6px 0 6px 10px;margin:10px 0;
+  }
+
   .wkRow .x{
     background:none;border:none;color:var(--dim);cursor:pointer;
     font-size:15px;padding:0 2px;letter-spacing:0;
@@ -293,6 +329,12 @@
   <div id="compare"></div>
 
   <div class="addbar">
+    <button id="toList">Add to shopping list</button>
+    <button class="ghost" id="noReceipt">No receipt</button>
+  </div>
+
+  <div id="manualQty" hidden>
+  <div class="addbar" style="border:none;padding-top:8px;margin-top:0">
     <span class="lab">How much did you buy?</span>
   </div>
   <div class="addbar" style="border:none;padding-top:8px;margin-top:0">
@@ -316,8 +358,34 @@
     supplies the quantity and caps it, because a number you type is a number
     you would inflate.
   </div>
+  </div>
 
   <button class="flag" id="flag">This classification looks wrong →</button>
+</div>
+
+<div id="basket" class="empty">
+  <h2>Shopping list</h2>
+  <div id="bList"></div>
+  <p class="qtyHint">
+    Scan everything first, then photograph the receipt once. The receipt
+    supplies the quantities — that is the whole point of it.
+  </p>
+  <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+    <button id="shoot">Photograph the receipt</button>
+    <button class="ghost" id="clearList">Clear list</button>
+  </div>
+  <input id="receiptFile" type="file" accept="image/*" capture="environment" hidden>
+</div>
+
+<div id="receipt" class="empty">
+  <h2>What the receipt says</h2>
+  <div id="rHead"></div>
+  <div id="rMatches"></div>
+  <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+    <button id="confirm">Confirm and claim</button>
+    <button class="ghost" id="discard">Discard</button>
+  </div>
+  <div class="capNote" style="margin-top:10px" id="rFoot"></div>
 </div>
 
 <div id="week" class="empty">
@@ -388,6 +456,13 @@ const pos = v => {
 };
 
 const $ = id => document.getElementById(id);
+
+/* Product names come from Open Food Facts, which anyone can edit, and
+   they are written straight into innerHTML below. They are data, not
+   markup. */
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /* Open Food Facts records a serving size as free text: "1 can (142 g)",
    "30g", "2 tbsp (32g)". Pull the grams out when it is there. */
@@ -466,7 +541,7 @@ function renderWeek(){
 
   $('wkList').innerHTML = rows.map((e,i) =>
     '<div class="wkRow">'
-    + '<span class="n">' + e.name + '</span>'
+    + '<span class="n">' + esc(e.name) + '</span>'
     + '<span class="p">' + Math.round(e.protein) + 'g · ' + e.mult.toFixed(2) + '×</span>'
     + '<span class="pts">' + Math.round(e.points) + '</span>'
     + (e.remote ? '' : '<button class="x" data-i="' + (i - serverRows.length) + '" title="remove">×</button>')
@@ -562,6 +637,11 @@ $('add').addEventListener('click', async () => {
     mult:    current.mult,
     points:  protein * current.mult,
     co2:     protein / 100 * current.co2,
+    /* The rate, kept alongside the product. The server scales it by the
+       protein claimed, so sending the already-scaled figure scaled it
+       twice: wrong by a factor of protein/100, which under-reports a
+       small claim and over-reports a large one. */
+    co2_100: current.co2,
     source_key: current.source_key,
     entry_id: entryId,
   };
@@ -583,6 +663,219 @@ $('add').addEventListener('click', async () => {
     save(); renderWeek();
   }
   $('week').scrollIntoView({ behavior:'smooth', block:'start' });
+});
+
+/* ---------- the shopping list ----------
+ *
+ * A receipt covers a shop, not a product, so scans have to accumulate
+ * before the photograph is taken. The list is what the receipt is checked
+ * against, and it is the only place the pack size from Open Food Facts is
+ * carried: the server never queries that database itself, so a quantity
+ * dropped here is a quantity the server cannot reason about.
+ */
+let basket = [];
+let receiptResult = null;
+let askChoice = {};              // barcode -> 'keep' | 'lower'
+
+function renderBasket(){
+  const el = $('basket');
+  if (!basket.length){ el.classList.add('empty'); return; }
+  el.classList.remove('empty');
+  $('bList').innerHTML = basket.map((b, i) =>
+    '<div class="bRow">'
+    + '<span class="n">' + esc(b.name) + '</span>'
+    + '<span>' + (Math.round(b.protein100 * 10) / 10) + 'g/100g</span>'
+    + '<button class="x" data-i="' + i + '" title="remove">×</button>'
+    + '</div>').join('');
+}
+
+$('bList').addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]');
+  if (!b) return;
+  basket.splice(+b.dataset.i, 1);
+  renderBasket();
+});
+
+$('toList').addEventListener('click', () => {
+  if (!current){ show('Look something up first.', true); return; }
+  if (basket.some(b => b.barcode === current.barcode)){
+    show('That one is already on the list.', true);
+    return;
+  }
+  basket.push({
+    barcode: current.barcode,
+    name: current.name,
+    protein100: current.protein100,
+    mult: current.mult,
+    co2: current.co2,
+    source_key: current.source_key,
+    quantity: current.quantity || null,
+  });
+  renderBasket();
+  show('Added. Scan the rest, then photograph the receipt.');
+  $('basket').scrollIntoView({ behavior:'smooth', block:'start' });
+});
+
+/* The typed weight is the fallback now, not the default. A number you type
+   is a number you would inflate, so it sits behind a deliberate choice to
+   shop without a receipt. */
+$('noReceipt').addEventListener('click', () => {
+  const box = $('manualQty');
+  box.hidden = !box.hidden;
+  $('noReceipt').textContent = box.hidden ? 'No receipt' : 'Hide';
+  if (!box.hidden) updateHint();
+});
+
+$('clearList').addEventListener('click', () => {
+  basket = []; receiptResult = null; askChoice = {};
+  renderBasket(); renderReceipt();
+});
+
+/* ---------- the receipt ---------- */
+
+$('shoot').addEventListener('click', () => {
+  if (!window.pergramSignedIn || !window.pergramSignedIn()){
+    show('Sign in first — a receipt is read against your wallet.', true);
+    return;
+  }
+  $('receiptFile').click();
+});
+
+$('receiptFile').addEventListener('change', async e => {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = '';              // so the same photo can be retried
+  if (!file) return;
+
+  $('shoot').disabled = true;
+  $('shoot').textContent = 'Reading the receipt…';
+  try {
+    receiptResult = await window.pergramReceipt(file, basket);
+    askChoice = {};
+    renderReceipt();
+    $('receipt').scrollIntoView({ behavior:'smooth', block:'start' });
+  } catch(err){
+    show('Could not read that receipt: ' + (err && err.message ? err.message : err), true);
+  } finally {
+    $('shoot').disabled = false;
+    $('shoot').textContent = 'Photograph the receipt';
+  }
+});
+
+/* The figure the server returned, unless the user has said it was less.
+   There is no third option: no answer here may raise a claim. */
+function gramsFor(m){
+  return (m.ask && askChoice[m.barcode] === 'lower') ? m.ask.lower_g : m.grams;
+}
+
+function claimable(){
+  return ((receiptResult && receiptResult.matches) || [])
+    .filter(m => m.matched && m.grams !== null);
+}
+
+function renderReceipt(){
+  const el = $('receipt');
+  if (!receiptResult){ el.classList.add('empty'); return; }
+  el.classList.remove('empty');
+
+  const r    = receiptResult.receipt || {};
+  const when = r.purchased ? new Date(r.purchased).toLocaleDateString() : 'date not found';
+  const tot  = r.total_cents != null ? '$' + (r.total_cents / 100).toFixed(2) : 'total not found';
+
+  let head = '<div class="mLine">'
+    + esc(r.store || 'store not found') + ' · ' + esc(when) + ' · ' + esc(tot)
+    + '</div>';
+  if (receiptResult.already_claimed){
+    head += '<div class="warn">This receipt has already been claimed. Nothing further will be recorded from it.</div>';
+  }
+  if (receiptResult.weak_identity){
+    head += '<div class="warn">No transaction number on this receipt, so it can only be identified by the photograph itself — which a re-photograph defeats.</div>';
+  }
+  $('rHead').innerHTML = head;
+
+  const matches = receiptResult.matches || [];
+  $('rMatches').innerHTML = matches.map(m => {
+    const b = basket.find(x => x.barcode === m.barcode) || {};
+
+    if (!m.matched || m.grams === null){
+      return '<div class="mRow no"><span class="n">' + esc(m.name) + '</span>'
+        + '<span>no matching line</span></div>';
+    }
+
+    const g       = gramsFor(m);
+    const protein = b.protein100 ? g * b.protein100 / 100 : null;
+
+    let html = '<div class="mRow">'
+      + '<span class="n">' + esc(m.name) + '</span>'
+      + '<span class="g">' + Math.round(g) + 'g</span>'
+      + (protein === null ? '' : '<span>' + (Math.round(protein * 10) / 10) + 'g protein</span>')
+      + '</div>'
+      + '<div class="mLine">matched “' + esc(m.line) + '”'
+      + (m.count > 1 ? ' × ' + m.count : '') + '</div>';
+
+    /* Two answers, and neither of them raises anything. */
+    if (m.ask){
+      const choice = askChoice[m.barcode] || 'keep';
+      html += '<div class="askBox"><div class="askQ">' + esc(m.ask.question) + '</div>'
+        + '<div class="askBtns">'
+        + '<button data-ask="keep" data-bc="' + esc(m.barcode) + '" aria-pressed="'
+        + (choice === 'keep') + '">The pack — ' + Math.round(m.ask.keep_g) + 'g</button>'
+        + '<button data-ask="lower" data-bc="' + esc(m.barcode) + '" aria-pressed="'
+        + (choice === 'lower') + '">A single unit — ' + Math.round(m.ask.lower_g) + 'g</button>'
+        + '</div></div>';
+    }
+    return html;
+  }).join('');
+
+  const n = claimable().length;
+  $('confirm').disabled = !!receiptResult.already_claimed || !n;
+  $('rFoot').textContent = n
+    ? n + ' of ' + matches.length + ' scanned on this receipt. Nothing is claimed until you confirm.'
+    : 'None of the scanned products appear on this receipt.';
+}
+
+$('rMatches').addEventListener('click', e => {
+  const b = e.target.closest('button[data-ask]');
+  if (!b) return;
+  askChoice[b.dataset.bc] = b.dataset.ask;
+  renderReceipt();
+});
+
+$('discard').addEventListener('click', () => {
+  receiptResult = null; askChoice = {};
+  renderReceipt();
+});
+
+$('confirm').addEventListener('click', async () => {
+  const items = claimable().map(m => {
+    const b = basket.find(x => x.barcode === m.barcode) || {};
+    const g = gramsFor(m);
+    return {
+      barcode: m.barcode,
+      product: m.name,
+      source_key: b.source_key || 'unresolved',
+      protein_g: b.protein100 ? +(g * b.protein100 / 100).toFixed(1) : 0,
+      /* co2 per 100g of protein. The server scales it by the protein
+         actually claimed, so an already-scaled figure would be wrong. */
+      co2:  b.co2,
+      mult: b.mult,
+    };
+  });
+  if (!items.length) return;
+
+  $('confirm').disabled = true;
+  $('confirm').textContent = 'Claiming…';
+  try {
+    await window.pergramClaimReceipt(receiptResult.receipt, items);
+    basket = []; receiptResult = null; askChoice = {};
+    renderBasket(); renderReceipt();
+    show('Claimed. The week below is what the server holds.');
+    $('week').scrollIntoView({ behavior:'smooth', block:'start' });
+  } catch(err){
+    show('The server did not accept that: ' + (err && err.message ? err.message : err), true);
+  } finally {
+    $('confirm').textContent = 'Confirm and claim';
+    renderReceipt();
+  }
 });
 
 $('flag').addEventListener('click', () => {
@@ -726,6 +1019,7 @@ async function lookup(barcode){
     protein100: protein,
     source_key: key || 'unresolved',
     serving_g: servingGrams(p),
+    quantity: p.quantity || null,
   };
   updateHint();
   $('flag').textContent = 'This classification looks wrong →';

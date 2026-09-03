@@ -9,7 +9,7 @@
  * device is the truth when not, and the user is told which.
  */
 
-import { api, signIn, signOut, me, getWeek, postClaim, postFlag, health } from './api.js';
+import { api, signIn, signOut, me, getWeek, postClaim, postFlag, postReceipt, health } from './api.js';
 
 const $ = id => document.getElementById(id);
 const acct = $('acct'), who = $('acctWho'), btn = $('signIn');
@@ -93,7 +93,7 @@ window.pergramClaim = async function(item){
       { store: 'manual-entry', txn: null, purchased: Date.now(), total_cents: null,
         image_hash: 'manual:' + item.barcode + ':' + item.entry_id },
       [{ barcode: item.barcode, product: item.name, source_key: item.source_key,
-         protein_g: item.protein, co2: item.co2, mult: item.mult }],
+         protein_g: item.protein, co2: item.co2_100, mult: item.mult }],
     );
     await refresh();
     return true;
@@ -108,6 +108,25 @@ window.pergramClaim = async function(item){
 window.pergramFlag = async function(barcode, said){
   try { await postFlag(barcode, said, null); return true; }
   catch (e){ return false; }
+};
+
+/* ---------- receipts ----------
+ *
+ * Two calls, deliberately separate. Reading a receipt claims nothing —
+ * it reports what the server thinks it found, and the user confirms
+ * before anything is recorded. An OCR misread that silently pays is
+ * worse than one the user can correct.
+ */
+window.pergramReceipt = async function(file, scanned){
+  if (!api.signedIn || !apiUp) throw new Error('sign in to send a receipt');
+  return postReceipt(file, scanned);
+};
+
+window.pergramClaimReceipt = async function(receipt, items){
+  if (!api.signedIn || !apiUp) throw new Error('sign in to claim');
+  const out = await postClaim(receipt, items);
+  await refresh();
+  return out;
 };
 
 window.pergramSignedIn = () => api.signedIn && apiUp;
