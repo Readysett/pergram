@@ -441,6 +441,9 @@
     <h3>Rows rebuilt from word positions</h3>
     <pre id="dRows"></pre>
 
+    <h3>Where each word was</h3>
+    <pre id="dWords"></pre>
+
     <h3>What the parser concluded</h3>
     <pre id="dParsed"></pre>
 
@@ -966,6 +969,25 @@ function diagText(){
     ? (r.dropped || []).map(d => d.text + '\n      -> ' + d.why).join('\n')
     : '(nothing dropped)';
 
+  /* The geometry the rows were built from. Whether two words belong on
+     one row is a question about where they are, and it cannot be settled
+     from the text that grouping produced — gap is the distance from the
+     previous word's right edge, which is what decides a split. */
+  const pad = (v, n) => String(v).padStart(n);
+  const ws = (r.words || []).slice().sort((a, b) => (a.y - b.y) || (a.x - b.x));
+  let lastY = null, lastX2 = null;
+  const words = ws.length
+    ? ['    y    h      x1     x2     gap  text',
+       ...ws.map(w => {
+         const newRow = lastY === null || Math.abs(w.y - lastY) > (w.h || 20) * 0.6;
+         const gap = newRow || lastX2 === null ? null : Math.round(w.x - lastX2);
+         lastY = w.y; lastX2 = Number.isFinite(w.x2) ? w.x2 : w.x;
+         return pad(Math.round(w.y), 5) + pad(Math.round(w.h), 4) + '  '
+              + pad(Math.round(w.x), 6) + pad(Math.round(w.x2), 7) + '  '
+              + pad(gap === null ? '-' : gap, 6) + '  ' + w.text;
+       })].join('\n')
+    : '(the adapter returned no positions)';
+
   /* The rows the parse was actually made from. Against the raw text
      above, this is the whole question: if Vision returned columns, the
      raw block reads as every description then every price, and this one
@@ -974,13 +996,14 @@ function diagText(){
     ? r.rows.join('\n')
     : '(no rows)';
 
-  return { parsed, items, dropped, rows, raw: r.raw || '(nothing returned)' };
+  return { parsed, items, dropped, rows, words, raw: r.raw || '(nothing returned)' };
 }
 
 function renderDiagnostic(){
   const d = diagText();
   $('dRaw').textContent     = d.raw;
   $('dRows').textContent    = d.rows;
+  $('dWords').textContent   = d.words;
   $('dParsed').textContent  = d.parsed;
   $('dItems').textContent   = d.items;
   $('dDropped').textContent = d.dropped;
@@ -991,6 +1014,7 @@ $('copyDiag').addEventListener('click', async () => {
   const blob =
     '--- raw text vision returned ---\n' + d.raw +
     '\n\n--- rows rebuilt from word positions ---\n' + d.rows +
+    '\n\n--- where each word was ---\n' + d.words +
     '\n\n--- what the parser concluded ---\n' + d.parsed +
     '\n\n--- lines extracted ---\n' + d.items +
     '\n\n--- lines dropped ---\n' + d.dropped +
