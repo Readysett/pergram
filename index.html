@@ -248,7 +248,10 @@
   .diag pre{
     font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.5;
     background:#fff;border:1px solid var(--rule);padding:8px;margin:0;
-    max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    /* pre, not pre-wrap: a rebuilt row that wraps looks like two rows,
+       which is the exact confusion this panel exists to remove. It
+       scrolls sideways instead. */
+    max-height:260px;overflow:auto;white-space:pre;
     user-select:text;-webkit-user-select:text;
   }
   .diagBar{display:flex;align-items:center;gap:10px;margin-top:10px}
@@ -434,6 +437,9 @@
 
     <h3>Raw text Vision returned</h3>
     <pre id="dRaw"></pre>
+
+    <h3>Rows rebuilt from word positions</h3>
+    <pre id="dRows"></pre>
 
     <h3>What the parser concluded</h3>
     <pre id="dParsed"></pre>
@@ -938,6 +944,9 @@ function diagText(){
   const r = receiptResult || {};
   const rc = r.receipt || {};
   const parsed = [
+    'reading order: ' + (r.reconstructed
+      ? 'rebuilt from word positions'
+      : "taken from the text's own line breaks"),
     'store       : ' + (rc.store === null ? '(not found)' : rc.store),
     'purchased   : ' + (rc.purchased == null
       ? '(not found)'
@@ -957,12 +966,21 @@ function diagText(){
     ? (r.dropped || []).map(d => d.text + '\n      -> ' + d.why).join('\n')
     : '(nothing dropped)';
 
-  return { parsed, items, dropped, raw: r.raw || '(nothing returned)' };
+  /* The rows the parse was actually made from. Against the raw text
+     above, this is the whole question: if Vision returned columns, the
+     raw block reads as every description then every price, and this one
+     reads as a receipt. */
+  const rows = (r.rows || []).length
+    ? r.rows.join('\n')
+    : '(no rows)';
+
+  return { parsed, items, dropped, rows, raw: r.raw || '(nothing returned)' };
 }
 
 function renderDiagnostic(){
   const d = diagText();
   $('dRaw').textContent     = d.raw;
+  $('dRows').textContent    = d.rows;
   $('dParsed').textContent  = d.parsed;
   $('dItems').textContent   = d.items;
   $('dDropped').textContent = d.dropped;
@@ -972,6 +990,7 @@ $('copyDiag').addEventListener('click', async () => {
   const d = diagText();
   const blob =
     '--- raw text vision returned ---\n' + d.raw +
+    '\n\n--- rows rebuilt from word positions ---\n' + d.rows +
     '\n\n--- what the parser concluded ---\n' + d.parsed +
     '\n\n--- lines extracted ---\n' + d.items +
     '\n\n--- lines dropped ---\n' + d.dropped +
