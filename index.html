@@ -948,12 +948,15 @@ function diagText(){
   const rc = r.receipt || {};
   const g = r.geometry || {};
   const parsed = [
-    /* What the grouping measured. A pitch under the text height is the
-       normal case on a receipt, and a pitch that comes out at or above it
-       means the estimate failed rather than the receipt being unusual. */
-    'text height : ' + (g.text_height == null ? '(unknown)' : Math.round(g.text_height)),
-    'line pitch  : ' + (g.line_pitch ? Math.round(g.line_pitch) : '(only one line found)'),
-    'split above : ' + (g.split_at ? Math.round(g.split_at) : '(n/a)'),
+    /* Rows are found by where they begin. The vertical figures are here
+       because when jitter and pitch come out close, that is the reason
+       the vertical signal is not being used — and it is worth being able
+       to see that rather than infer it. */
+    'text height  : ' + (g.text_height == null ? '(unknown)' : Math.round(g.text_height)),
+    'row jitter   : ' + (g.row_jitter  ? Math.round(g.row_jitter) : '0'),
+    'line pitch   : ' + (g.line_pitch  ? Math.round(g.line_pitch) : '(one line only)'),
+    'y separable  : ' + (g.y_separable ? 'yes' : 'no — rows found by x instead'),
+    'x reset over : ' + (g.x_reset_over ? Math.round(g.x_reset_over) : '(n/a)'),
     'reading order: ' + (r.reconstructed
       ? 'rebuilt from word positions'
       : "taken from the text's own line breaks"),
