@@ -946,7 +946,14 @@ function renderReceipt(){
 function diagText(){
   const r = receiptResult || {};
   const rc = r.receipt || {};
+  const g = r.geometry || {};
   const parsed = [
+    /* What the grouping measured. A pitch under the text height is the
+       normal case on a receipt, and a pitch that comes out at or above it
+       means the estimate failed rather than the receipt being unusual. */
+    'text height : ' + (g.text_height == null ? '(unknown)' : Math.round(g.text_height)),
+    'line pitch  : ' + (g.line_pitch ? Math.round(g.line_pitch) : '(only one line found)'),
+    'split above : ' + (g.split_at ? Math.round(g.split_at) : '(n/a)'),
     'reading order: ' + (r.reconstructed
       ? 'rebuilt from word positions'
       : "taken from the text's own line breaks"),
