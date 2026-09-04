@@ -952,6 +952,11 @@ function diagText(){
        because when jitter and pitch come out close, that is the reason
        the vertical signal is not being used — and it is worth being able
        to see that rather than infer it. */
+    /* The tilt taken out before rows were read. Past a degree or two the
+       rows overlap in the image and nothing downstream can separate them,
+       so this is the first number to look at when rows come out mixed. */
+    'page skew    : ' + (g.skew_degrees == null ? '(unknown)'
+                          : (Math.round(g.skew_degrees * 100) / 100) + ' deg'),
     'text height  : ' + (g.text_height == null ? '(unknown)' : Math.round(g.text_height)),
     'row jitter   : ' + (g.row_jitter  ? Math.round(g.row_jitter) : '0'),
     'line pitch   : ' + (g.line_pitch  ? Math.round(g.line_pitch) : '(one line only)'),
