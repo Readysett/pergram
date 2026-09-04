@@ -438,7 +438,7 @@
     <h3>Raw text Vision returned</h3>
     <pre id="dRaw"></pre>
 
-    <h3>Rows rebuilt from word positions</h3>
+    <h3 id="dRowsTitle">Rows rebuilt from word positions</h3>
     <pre id="dRows"></pre>
 
     <h3>Where each word was</h3>
@@ -947,7 +947,9 @@ function diagText(){
   const r = receiptResult || {};
   const rc = r.receipt || {};
   const g = r.geometry || {};
+  const byFields = r.source === 'document-ai';
   const parsed = [
+    'read by      : ' + (r.source || '(unknown)'),
     /* Rows are found by where they begin. The vertical figures are here
        because when jitter and pitch come out close, that is the reason
        the vertical signal is not being used — and it is worth being able
@@ -955,6 +957,7 @@ function diagText(){
     /* The tilt taken out before rows were read. Past a degree or two the
        rows overlap in the image and nothing downstream can separate them,
        so this is the first number to look at when rows come out mixed. */
+    ...(byFields ? [] : [
     'page skew    : ' + (g.skew_degrees == null ? '(unknown)'
                           : (Math.round(g.skew_degrees * 100) / 100) + ' deg'),
     'text height  : ' + (g.text_height == null ? '(unknown)' : Math.round(g.text_height)),
@@ -962,6 +965,7 @@ function diagText(){
     'line pitch   : ' + (g.line_pitch  ? Math.round(g.line_pitch) : '(one line only)'),
     'y separable  : ' + (g.y_separable ? 'yes' : 'no — rows found by x instead'),
     'x reset over : ' + (g.x_reset_over ? Math.round(g.x_reset_over) : '(n/a)'),
+    ]),
     'reading order: ' + (r.reconstructed
       ? 'rebuilt from word positions'
       : "taken from the text's own line breaks"),
@@ -1001,7 +1005,9 @@ function diagText(){
               + pad(Math.round(w.x), 6) + pad(Math.round(w.x2), 7) + '  '
               + pad(gap === null ? '-' : gap, 6) + '  ' + w.text;
        })].join('\n')
-    : '(the adapter returned no positions)';
+    : (byFields
+        ? '(not used — the processor returned the fields itself)'
+        : '(the adapter returned no positions)');
 
   /* The rows the parse was actually made from. Against the raw text
      above, this is the whole question: if Vision returned columns, the
@@ -1009,7 +1015,7 @@ function diagText(){
      reads as a receipt. */
   const rows = (r.rows || []).length
     ? r.rows.join('\n')
-    : '(no rows)';
+    : (byFields ? '(no line items found)' : '(no rows)');
 
   return { parsed, items, dropped, rows, words, raw: r.raw || '(nothing returned)' };
 }
@@ -1017,6 +1023,9 @@ function diagText(){
 function renderDiagnostic(){
   const d = diagText();
   $('dRaw').textContent     = d.raw;
+  $('dRowsTitle').textContent = (receiptResult && receiptResult.source === 'document-ai')
+    ? 'Line items the processor returned'
+    : 'Rows rebuilt from word positions';
   $('dRows').textContent    = d.rows;
   $('dWords').textContent   = d.words;
   $('dParsed').textContent  = d.parsed;
