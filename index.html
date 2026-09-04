@@ -229,6 +229,37 @@
   .wkRow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .wkRow .p{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim)}
   .wkRow .pts{font-family:"IBM Plex Mono",monospace;font-size:13px;font-variant-numeric:tabular-nums}
+  /* TEMPORARY — the parser diagnostic. Goes out with the block marked
+     the same way in the markup and the script below, once the date,
+     total and matcher are fixed. */
+  .diag{margin-top:16px;border-top:1px solid var(--rule);padding-top:12px}
+  .diag summary{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);
+    cursor:pointer;letter-spacing:.04em;
+  }
+  .diagTmp{
+    background:var(--t3);color:var(--paper);padding:1px 5px;margin-left:6px;
+    font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  }
+  .diag h3{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--dim);
+    text-transform:uppercase;letter-spacing:.08em;margin:12px 0 4px;
+  }
+  .diag pre{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.5;
+    background:#fff;border:1px solid var(--rule);padding:8px;margin:0;
+    max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+    user-select:text;-webkit-user-select:text;
+  }
+  .diagBar{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .diagBar button{padding:6px 10px;font-size:10px}
+  .diagNote{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--t1)}
+  .diagAll{
+    width:100%;height:220px;margin-top:8px;
+    font-family:"IBM Plex Mono",monospace;font-size:11px;line-height:1.5;
+    border:2px solid var(--t3);padding:8px;background:#fff;color:var(--ink);
+  }
+
   /* ---------- shopping list and receipt ---------- */
   #basket, #receipt{border:2px solid var(--ink);padding:16px;margin-top:22px}
   #basket.empty, #receipt.empty{display:none}
@@ -386,6 +417,33 @@
     <button class="ghost" id="discard">Discard</button>
   </div>
   <div class="capNote" style="margin-top:10px" id="rFoot"></div>
+
+  <!-- TEMPORARY: what the parse was made from. Remove with the styles
+       and the script block marked the same way. -->
+  <details id="rDiag" class="diag">
+    <summary>What the parser saw <span class="diagTmp">temporary</span></summary>
+
+    <div class="diagBar">
+      <button class="ghost" id="copyDiag">Copy all</button>
+      <span class="diagNote" id="diagCopied"></span>
+    </div>
+
+    <!-- Shown only when the clipboard refuses. A textarea rather than a
+         <pre> because selecting one reliably works on a phone. -->
+    <textarea id="diagAll" class="diagAll" readonly hidden></textarea>
+
+    <h3>Raw text Vision returned</h3>
+    <pre id="dRaw"></pre>
+
+    <h3>What the parser concluded</h3>
+    <pre id="dParsed"></pre>
+
+    <h3>Lines it extracted</h3>
+    <pre id="dItems"></pre>
+
+    <h3>Lines it dropped, and why</h3>
+    <pre id="dDropped"></pre>
+  </details>
 </div>
 
 <div id="week" class="empty">
@@ -863,12 +921,80 @@ function renderReceipt(){
     return html;
   }).join('');
 
+  /* TEMPORARY: the raw text beside what was made of it, so the two can
+     be compared rather than the parse being argued with blind. Remove
+     this, its markup and its styles once the parsing is fixed. */
+  renderDiagnostic();
+
   const n = claimable().length;
   $('confirm').disabled = !!receiptResult.already_claimed || !n;
   $('rFoot').textContent = n
     ? n + ' of ' + matches.length + ' scanned on this receipt. Nothing is claimed until you confirm.'
     : 'None of the scanned products appear on this receipt.';
 }
+
+/* TEMPORARY — diagnostic. Remove with its markup and styles. */
+function diagText(){
+  const r = receiptResult || {};
+  const rc = r.receipt || {};
+  const parsed = [
+    'store       : ' + (rc.store === null ? '(not found)' : rc.store),
+    'purchased   : ' + (rc.purchased == null
+      ? '(not found)'
+      : rc.purchased + '  -> ' + new Date(rc.purchased).toString()),
+    'total_cents : ' + (rc.total_cents == null
+      ? '(not found)'
+      : rc.total_cents + '  -> ' + (rc.total_cents / 100).toFixed(2)),
+    'txn         : ' + (rc.txn === null ? '(not found)' : rc.txn),
+  ].join('\n');
+
+  const items = (r.lines || []).length
+    ? (r.lines || []).map(l =>
+        (l.qty ? l.qty + ' x ' : '') + l.text + '   ' + (l.cents / 100).toFixed(2)).join('\n')
+    : '(no lines extracted)';
+
+  const dropped = (r.dropped || []).length
+    ? (r.dropped || []).map(d => d.text + '\n      -> ' + d.why).join('\n')
+    : '(nothing dropped)';
+
+  return { parsed, items, dropped, raw: r.raw || '(nothing returned)' };
+}
+
+function renderDiagnostic(){
+  const d = diagText();
+  $('dRaw').textContent     = d.raw;
+  $('dParsed').textContent  = d.parsed;
+  $('dItems').textContent   = d.items;
+  $('dDropped').textContent = d.dropped;
+}
+
+$('copyDiag').addEventListener('click', async () => {
+  const d = diagText();
+  const blob =
+    '--- raw text vision returned ---\n' + d.raw +
+    '\n\n--- what the parser concluded ---\n' + d.parsed +
+    '\n\n--- lines extracted ---\n' + d.items +
+    '\n\n--- lines dropped ---\n' + d.dropped +
+    '\n\n--- matches ---\n' + JSON.stringify((receiptResult || {}).matches || [], null, 2) + '\n';
+
+  try {
+    await navigator.clipboard.writeText(blob);
+    $('diagCopied').textContent = 'copied';
+  } catch (e){
+    /* The clipboard is refused often enough — a sandboxed frame, a page
+       without user activation — that the fallback has to hand over the
+       whole thing rather than just the part that happens to be on
+       screen. Selecting a textarea works where selecting a <pre> does
+       not, particularly on iOS. */
+    const ta = $('diagAll');
+    ta.value = blob;
+    ta.hidden = false;
+    ta.focus();
+    ta.setSelectionRange(0, blob.length);
+    $('diagCopied').textContent = 'selected — copy it';
+  }
+  setTimeout(() => { $('diagCopied').textContent = ''; }, 4000);
+});
 
 $('rMatches').addEventListener('click', e => {
   const b = e.target.closest('button[data-ask]');
