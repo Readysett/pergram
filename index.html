@@ -943,11 +943,15 @@ function renderReceipt(){
 }
 
 /* TEMPORARY — diagnostic. Remove with its markup and styles. */
+/* The two readers that rebuild reading order themselves. Everything else
+   is a provider that returned fields, and has no geometry to report. */
+const GEOMETRY_SOURCES = ['word-geometry', 'text-lines'];
+
 function diagText(){
   const r = receiptResult || {};
   const rc = r.receipt || {};
   const g = r.geometry || {};
-  const byFields = r.source === 'document-ai';
+  const byFields = !!r.source && !GEOMETRY_SOURCES.includes(r.source);
   const parsed = [
     'read by      : ' + (r.source || '(unknown)'),
     /* Rows are found by where they begin. The vertical figures are here
@@ -1023,7 +1027,7 @@ function diagText(){
 function renderDiagnostic(){
   const d = diagText();
   $('dRaw').textContent     = d.raw;
-  $('dRowsTitle').textContent = (receiptResult && receiptResult.source === 'document-ai')
+  $('dRowsTitle').textContent = (receiptResult && !GEOMETRY_SOURCES.includes(receiptResult.source))
     ? 'Line items the processor returned'
     : 'Rows rebuilt from word positions';
   $('dRows').textContent    = d.rows;
